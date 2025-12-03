@@ -6,6 +6,7 @@ import multer from 'multer'
 import 'dotenv/config' // Load environment variables
 import { createServer as createViteServer } from 'vite'
 import sequelize from './db/db.js'
+import { Op } from 'sequelize'
 import { Article, Comment } from './db/models.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -49,8 +50,20 @@ async function createServer() {
       const offset = (page - 1) * limit
       const sortBy = req.query.sortBy || 'createdAt'
       const order = req.query.order || 'DESC'
+      const search = req.query.search || ''
+
+      const where = {}
+      if (search) {
+        if (search.startsWith('#')) {
+          const tagQuery = search.substring(1)
+          where.tags = { [Op.like]: `%${tagQuery}%` }
+        } else {
+          where.title = { [Op.like]: `%${search}%` }
+        }
+      }
 
       const { count, rows } = await Article.findAndCountAll({
+        where,
         order: [[sortBy, order]],
         limit: limit,
         offset: offset

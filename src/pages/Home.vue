@@ -3,13 +3,24 @@
     <div class="sidebar">
       <h3>Tag Cloud</h3>
       <div class="tag-cloud">
-        <span v-for="tag in tags" :key="tag.name" class="tag-cloud-item" :style="{ fontSize: 12 + (tag.count * 2) + 'px' }">
+        <span 
+          v-for="tag in tags" 
+          :key="tag.name" 
+          class="tag-cloud-item" 
+          :style="{ fontSize: 12 + (tag.count * 2) + 'px' }"
+          @click="selectTag(tag.name)"
+        >
           {{ tag.name }} ({{ tag.count }})
         </span>
       </div>
     </div>
     <div class="main-content">
       <h1>Latest Articles</h1>
+      
+      <div class="search-bar">
+        <input v-model="searchQuery" placeholder="Search articles..." />
+      </div>
+
       <div v-if="loading">Loading...</div>
       <div v-else>
         <ul class="article-list">
@@ -50,6 +61,11 @@ const tags = ref([])
 const loading = ref(true)
 const currentPage = ref(1)
 const totalPages = ref(1)
+const searchQuery = ref('')
+
+const selectTag = (tagName) => {
+  searchQuery.value = `#${tagName}`
+}
 
 const fetchTags = async () => {
   try {
@@ -66,7 +82,11 @@ const fetchArticles = async (page = 1) => {
   const baseUrl = import.meta.env.SSR ? 'http://localhost:3000' : ''
   try {
     // Limit set to 3 to demonstrate pagination easily
-    const res = await fetch(`${baseUrl}/api/articles?page=${page}&limit=3`)
+    let url = `${baseUrl}/api/articles?page=${page}&limit=3`
+    if (searchQuery.value) {
+      url += `&search=${encodeURIComponent(searchQuery.value)}`
+    }
+    const res = await fetch(url)
     const data = await res.json()
     articles.value = data.articles
     totalPages.value = data.totalPages
@@ -77,6 +97,19 @@ const fetchArticles = async (page = 1) => {
     loading.value = false
   }
 }
+
+const searchArticles = () => {
+  currentPage.value = 1
+  fetchArticles(1)
+}
+
+let debounceTimeout = null
+watch(searchQuery, () => {
+  if (debounceTimeout) clearTimeout(debounceTimeout)
+  debounceTimeout = setTimeout(() => {
+    searchArticles()
+  }, 300)
+})
 
 const changePage = (page) => {
   if (page >= 1 && page <= totalPages.value) {
@@ -124,13 +157,33 @@ onMounted(async () => {
   gap: 20px;
 }
 .sidebar {
-  width: 200px;
-  flex-shrink: 0;
-  padding-right: 20px;
-  border-right: 1px solid var(--border-color, #eee);
+  width: 250px;
+  padding: 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  height: fit-content;
 }
 .main-content {
-  flex-grow: 1;
+  flex: 1;
+}
+.search-bar {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+}
+.search-bar input {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+.search-bar button {
+  padding: 8px 16px;
+  background: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
 }
 .tag-cloud {
   display: flex;
@@ -138,57 +191,37 @@ onMounted(async () => {
   gap: 10px;
 }
 .tag-cloud-item {
-  background: var(--border-color, #eee);
-  padding: 2px 6px;
-  border-radius: 4px;
-  color: var(--text-color, #333);
+  color: #42b983;
+  cursor: pointer;
 }
 .article-list {
   list-style: none;
   padding: 0;
 }
 .article-item {
-  margin-bottom: 20px;
   border-bottom: 1px solid #eee;
-  padding-bottom: 20px;
+  padding: 20px 0;
 }
 .meta {
-  color: #666;
+  color: #888;
   font-size: 0.9em;
 }
+.actions {
+  margin-top: 10px;
+}
+.edit-btn, .delete-btn {
+  margin-right: 10px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.delete-btn {
+  color: red;
+}
 .pagination {
+  margin-top: 20px;
   display: flex;
   gap: 10px;
   align-items: center;
   justify-content: center;
-  margin-top: 20px;
-}
-.pagination button {
-  padding: 5px 10px;
-  cursor: pointer;
-}
-.pagination button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.delete-btn {
-  background: #ff4444;
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  cursor: pointer;
-  border-radius: 3px;
-}
-.edit-btn {
-  background: #42b883;
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  cursor: pointer;
-  border-radius: 3px;
-  margin-right: 10px;
-}
-.actions {
-  margin-top: 10px;
 }
 </style>
