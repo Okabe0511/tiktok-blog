@@ -52,7 +52,25 @@ const Comment = sequelize.define('Comment', {
   timestamps: true
 });
 
+const User = sequelize.define('User', {
+  username: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  role: {
+    type: DataTypes.ENUM('admin', 'user'),
+    defaultValue: 'user'
+  }
+}, {
+  timestamps: true
+});
+
 Article.hasMany(Comment, { foreignKey: 'articleId' });
 Comment.belongsTo(Article, { foreignKey: 'articleId' });
 
-export { Article, Comment };
+export { Article, Comment, User };

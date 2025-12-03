@@ -3,7 +3,15 @@
     <header>
       <nav>
         <router-link to="/">Home</router-link> |
-        <router-link to="/create">Create Article</router-link>
+        <template v-if="user">
+          <span class="user-info">Welcome, {{ user.username }} ({{ user.role }})</span> |
+          <router-link v-if="user.role === 'admin'" to="/create">Create Article</router-link> |
+          <a href="#" @click.prevent="logout">Logout</a>
+        </template>
+        <template v-else>
+          <router-link to="/login">Login</router-link>
+        </template>
+        
         <button @click="toggleTheme" class="theme-toggle">
           {{ isDark ? '☀️ Light' : '🌙 Dark' }}
         </button>
@@ -21,8 +29,32 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 
 const isDark = ref(false)
+const user = ref(null)
+const router = useRouter()
+
+const checkAuth = () => {
+  if (typeof localStorage !== 'undefined') {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      user.value = JSON.parse(userStr)
+    } else {
+      user.value = null
+    }
+  }
+}
+
+const logout = () => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    user.value = null
+    window.dispatchEvent(new Event('auth-change'))
+    router.push('/')
+  }
+}
 
 const toggleTheme = () => {
   isDark.value = !isDark.value
@@ -49,6 +81,12 @@ onMounted(() => {
       isDark.value = true
       updateBodyClass()
     }
+    
+    // Check auth on mount
+    checkAuth()
+    
+    // Listen for auth changes
+    window.addEventListener('auth-change', checkAuth)
   }
 })
 </script>
@@ -93,6 +131,10 @@ a {
   text-decoration: none;
   color: var(--link-color);
   margin-right: 10px;
+}
+.user-info {
+  margin-right: 10px;
+  font-weight: bold;
 }
 .theme-toggle {
   margin-left: auto;

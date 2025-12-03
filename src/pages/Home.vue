@@ -34,7 +34,7 @@
               Views: {{ article.views }}
             </p>
             <p>{{ article.summary }}</p>
-            <div class="actions">
+            <div class="actions" v-if="isAdmin">
             <button @click="$router.push(`/edit/${article.id}`)" class="edit-btn">Edit</button>
             <button @click="deleteArticle(article.id)" class="delete-btn">Delete</button>
           </div>
@@ -62,6 +62,19 @@ const loading = ref(true)
 const currentPage = ref(1)
 const totalPages = ref(1)
 const searchQuery = ref('')
+const isAdmin = ref(false)
+
+const checkAdmin = () => {
+  if (typeof localStorage !== 'undefined') {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      isAdmin.value = user.role === 'admin'
+    } else {
+      isAdmin.value = false
+    }
+  }
+}
 
 const selectTag = (tagName) => {
   searchQuery.value = `#${tagName}`
@@ -119,15 +132,28 @@ const changePage = (page) => {
 }
 
 const deleteArticle = async (id) => {
+  if (!isAdmin.value) return
   if (!confirm('Are you sure you want to delete this article?')) return
 
   try {
-    const res = await fetch(`/api/articles/${id}`, { method: 'DELETE' })
+    const headers = {}
+    if (typeof localStorage !== 'undefined') {
+      const token = localStorage.getItem('token')
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+    }
+
+    const res = await fetch(`/api/articles/${id}`, { 
+      method: 'DELETE',
+      headers: headers
+    })
     if (res.ok) {
       // Refresh list
       await fetchArticles(currentPage.value)
     } else {
-      alert('Failed to delete article')
+      const data = await res.json()
+      alert('Failed to delete article: ' + (data.error || 'Unknown error'))
     }
   } catch (e) {
     console.error(e)
@@ -142,6 +168,10 @@ onServerPrefetch(async () => {
 
 // Fetch on client
 onMounted(async () => {
+  checkAdmin()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('auth-change', checkAdmin)
+  }
   if (articles.value.length === 0) {
     await fetchArticles()
   }
@@ -213,9 +243,16 @@ onMounted(async () => {
   margin-right: 10px;
   padding: 5px 10px;
   cursor: pointer;
+  border: none;
+  border-radius: 4px;
+}
+.edit-btn {
+  background-color: #007bff;
+  color: white;
 }
 .delete-btn {
-  color: red;
+  background-color: #dc3545;
+  color: white;
 }
 .pagination {
   margin-top: 20px;
@@ -223,5 +260,17 @@ onMounted(async () => {
   gap: 10px;
   align-items: center;
   justify-content: center;
+}
+.pagination button {
+  padding: 5px 10px;
+  cursor: pointer;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+.pagination button:disabled {
+  background-color: #a0dcb9;
+  cursor: not-allowed;
 }
 </style>

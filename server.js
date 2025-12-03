@@ -3,11 +3,15 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import express from 'express'
 import multer from 'multer'
+import jwt from 'jsonwebtoken'
+import bcrypt from 'bcryptjs'
 import 'dotenv/config' // Load environment variables
 import { createServer as createViteServer } from 'vite'
 import sequelize from './db/db.js'
 import { Op } from 'sequelize'
-import { Article, Comment } from './db/models.js'
+import { Article, Comment, User } from './db/models.js'
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -30,11 +34,32 @@ async function createServer() {
   })
   const upload = multer({ storage: storage })
 
+  // --- Middleware ---
+  const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization']
+    const token = authHeader && authHeader.split(' ')[1]
+
+    if (!token) return res.sendStatus(401)
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) return res.sendStatus(403)
+      req.user = user
+      next()
+    })
+  }
+
+  const authorizeAdmin = (req, res, next) => {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    next()
+  }
+
   // --- API Routes ---
   const router = express.Router()
 
   // Upload Image API
-  router.post('/upload', upload.single('image'), (req, res) => {
+  router.post('/upload', authenticateToken, authorizeAdmin, upload.single('image'), (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' })
     }
@@ -98,7 +123,7 @@ async function createServer() {
   })
 
   // Create article
-  router.post('/articles', async (req, res) => {
+  router.post('/articles', authenticateToken, authorizeAdmin, async (req, res) => {
     try {
       const article = await Article.create(req.body)
       res.json(article)
@@ -108,7 +133,7 @@ async function createServer() {
   })
 
   // Update article
-  router.put('/articles/:id', async (req, res) => {
+  router.put('/articles/:id', authenticateToken, authorizeAdmin, async (req, res) => {
     try {
       const article = await Article.findByPk(req.params.id)
       if (article) {
@@ -123,7 +148,7 @@ async function createServer() {
   })
 
   // Delete article
-  router.delete('/articles/:id', async (req, res) => {
+  router.delete('/articles/:id', authenticateToken, authorizeAdmin, async (req, res) => {
     try {
       const article = await Article.findByPk(req.params.id)
       if (article) {
@@ -192,6 +217,56 @@ async function createServer() {
       // Convert to array
       const tags = Object.keys(tagCounts).map(tag => ({ name: tag, count: tagCounts[tag] }))
       res.json(tags)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+
+  // --- Auth Routes ---
+  router.post('/auth/register', async (req, res) => {
+    try {
+      const { username, password } = req.body
+      const hashedPassword = await bcrypt.hash(password, 10)
+      const user = await User.create({
+        username,
+        password: hashedPassword,
+        role: 'user' // Default role
+      })
+      res.status(201).json({ message: 'User created' })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  router.post('/auth/login', async (req, res) => {
+    try {
+      const { username, password } = req.body
+      const user = await User.findOne({ where: { username } })
+      if (!user) return res.status(400).json({ error: 'User not found' })
+
+      if (await bcrypt.compare(password, user.password)) {
+        const accessToken = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET)
+        res.json({ accessToken, role: user.role, username: user.username })
+      } else {
+        res.status(400).json({ error: 'Invalid password' })
+      }
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  // Create Admin User (for testing)
+  router.post('/auth/create-admin', async (req, res) => {
+    try {
+      const { username, password } = req.body
+      const hashedPassword = await bcrypt.hash(password, 10)
+      const user = await User.create({
+        username,
+        password: hashedPassword,
+        role: 'admin'
+      })
+      res.status(201).json({ message: 'Admin created' })
     } catch (e) {
       res.status(500).json({ error: e.message })
     }

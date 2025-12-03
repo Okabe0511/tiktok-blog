@@ -15,9 +15,11 @@ const routes = Object.keys(pages).map((path) => {
 import Home from '../pages/Home.vue'
 import ArticleDetail from '../pages/ArticleDetail.vue'
 import CreateArticle from '../pages/CreateArticle.vue'
+import Login from '../pages/Login.vue'
 
 const manualRoutes = [
   { path: '/', component: Home },
+  { path: '/login', component: Login },
   { path: '/article/:id', component: ArticleDetail },
   { path: '/create', component: CreateArticle },
   { path: '/edit/:id', component: CreateArticle },

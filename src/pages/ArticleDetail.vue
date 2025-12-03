@@ -1,6 +1,7 @@
 <template>
-  <div class="article-detail" v-if="article">
-    <h1>{{ article.title }}</h1>
+  <div class="article-page">
+    <div class="article-detail" v-if="article">
+      <h1>{{ article.title }}</h1>
     <div class="meta">
       <span>By {{ article.author }}</span> | 
       <span>{{ new Date(article.createdAt).toLocaleDateString() }}</span> |
@@ -10,6 +11,11 @@
     <div class="export-actions">
       <button @click="exportMarkdown">Export Markdown</button>
       <button @click="exportPDF">Export PDF</button>
+    </div>
+
+    <div class="admin-actions" v-if="isAdmin">
+      <button @click="editArticle" class="edit-btn">Edit</button>
+      <button @click="deleteArticle" class="delete-btn">Delete</button>
     </div>
 
     <div class="content" id="article-content" v-html="renderedContent"></div>
@@ -44,15 +50,17 @@
     </div>
 
     <router-link to="/">Back to Home</router-link>
+    </div>
+    <div v-else>Loading...</div>
   </div>
-  <div v-else>Loading...</div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onServerPrefetch, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 
+const router = useRouter()
 const route = useRoute()
 const article = ref(null)
 const comments = ref([])
@@ -60,12 +68,91 @@ const newCommentAuthor = ref('')
 const newCommentContent = ref('')
 const currentPage = ref(1)
 const pageSize = 200 
+const isAdmin = ref(false)
 
-const baseUrl = import.meta.env.SSR ? 'http://localhost:3000' : ''
+// Check admin status from localStorage
+const checkAdmin = () => {
+  if (typeof localStorage !== 'undefined') {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      isAdmin.value = user.role === 'admin'
+    } else {
+      isAdmin.value = false
+    }
+  }
+}
 
-// Fetch Article
-const res = await fetch(`${baseUrl}/api/articles/${route.params.id}`)
-article.value = await res.json()
+const fetchArticle = async () => {
+  try {
+    const baseUrl = import.meta.env.SSR ? 'http://localhost:3000' : ''
+    const res = await fetch(`${baseUrl}/api/articles/${route.params.id}`)
+    if (res.ok) {
+      article.value = await res.json()
+    }
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+// Watch for route changes to re-fetch article
+watch(() => route.params.id, (newId) => {
+  if (newId) {
+    fetchArticle()
+    fetchComments()
+  }
+})
+
+onServerPrefetch(async () => {
+  await fetchArticle()
+})
+
+onMounted(() => {
+  if (!article.value) {
+    fetchArticle()
+  }
+  fetchComments()
+  checkAdmin()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('auth-change', checkAdmin)
+  }
+})
+
+// Delete Article
+const deleteArticle = async () => {
+  if (!isAdmin.value) return
+  if (!confirm('Are you sure you want to delete this article?')) return
+
+  try {
+    const headers = { 'Content-Type': 'application/json' }
+    if (typeof localStorage !== 'undefined') {
+      const token = localStorage.getItem('token')
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+    }
+
+    const res = await fetch(`/api/articles/${article.value.id}`, {
+      method: 'DELETE',
+      headers: headers
+    })
+
+    if (res.ok) {
+      router.push('/')
+    } else {
+      const data = await res.json()
+      alert('Failed to delete: ' + (data.error || 'Unknown error'))
+    }
+  } catch (e) {
+    console.error(e)
+    alert('Error: ' + e.message)
+  }
+}
+
+const editArticle = () => {
+  if (!isAdmin.value) return
+  router.push(`/edit/${article.value.id}`)
+}
 
 // Fetch Comments (Client-side only for now to simplify SSR data fetching)
 const fetchComments = async () => {
@@ -76,10 +163,6 @@ const fetchComments = async () => {
     console.error(e)
   }
 }
-
-onMounted(() => {
-  fetchComments()
-})
 
 const submitComment = async () => {
   if (!newCommentContent.value) return
@@ -183,9 +266,13 @@ const exportPDF = async () => {
 .pagination button {
   padding: 5px 10px;
   cursor: pointer;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
 }
 .pagination button:disabled {
-  opacity: 0.5;
+  background-color: #a0dcb9;
   cursor: not-allowed;
 }
 .tag {
@@ -228,5 +315,22 @@ const exportPDF = async () => {
   margin-bottom: 5px;
   display: flex;
   justify-content: space-between;
+}
+.admin-actions {
+  margin: 10px 0;
+}
+.edit-btn, .delete-btn {
+  margin-right: 10px;
+  padding: 5px 10px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  color: white;
+}
+.edit-btn {
+  background-color: #007bff;
+}
+.delete-btn {
+  background-color: #dc3545;
 }
 </style>

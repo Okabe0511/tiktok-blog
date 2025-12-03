@@ -58,6 +58,21 @@ const form = reactive({
 })
 
 onMounted(async () => {
+  // Check authentication and role
+  if (typeof localStorage !== 'undefined') {
+    const userStr = localStorage.getItem('user')
+    if (!userStr) {
+      router.push('/login')
+      return
+    }
+    const user = JSON.parse(userStr)
+    if (user.role !== 'admin') {
+      alert('Access denied. Admins only.')
+      router.push('/')
+      return
+    }
+  }
+
   if (isEditMode.value) {
     try {
       const baseUrl = import.meta.env.SSR ? 'http://localhost:3000' : ''
@@ -87,8 +102,17 @@ const handleImageUpload = async (event) => {
   formData.append('image', file)
 
   try {
+    const headers = {}
+    if (typeof localStorage !== 'undefined') {
+      const token = localStorage.getItem('token')
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+    }
+
     const res = await fetch('/api/upload', {
       method: 'POST',
+      headers: headers,
       body: formData
     })
     const data = await res.json()
@@ -158,19 +182,29 @@ const submitArticle = async () => {
   try {
     const url = isEditMode.value ? `/api/articles/${route.params.id}` : '/api/articles'
     const method = isEditMode.value ? 'PUT' : 'POST'
+    
+    const headers = { 'Content-Type': 'application/json' }
+    if (typeof localStorage !== 'undefined') {
+      const token = localStorage.getItem('token')
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+    }
 
     const res = await fetch(url, {
       method: method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify(form)
     })
     if (res.ok) {
       router.push('/')
     } else {
-      alert('Failed to save article')
+      const data = await res.json()
+      alert('Failed to save article: ' + (data.error || 'Unknown error'))
     }
   } catch (e) {
     console.error(e)
+    alert('Error: ' + e.message)
   }
 }
 </script>
